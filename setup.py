@@ -11,7 +11,7 @@ setuptools.setup(
     description="A command-line music player for YouTube.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/pheinze/ymp",
+    url="https://github.com/mydcc/ymp",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
