@@ -34,6 +34,7 @@ setuptools.setup(
         'rich',
         'setuptools',
         'textual',
+        'mpris_server; platform_system == "Linux"',
     ],
     packages=setuptools.find_packages(),
     entry_points={
