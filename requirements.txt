@@ -1,0 +1,11 @@
+yt_dlp
+pyfiglet
+requests
+pydub
+termcolor
+beautifulsoup4
+colorama
+lxml
+simpleaudio
+rich
+textual
