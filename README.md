@@ -32,7 +32,7 @@ sudo apt-get update && sudo apt-get install -y libasound2-dev ffmpeg python3-pip
 Use `pipx` to install YMP in an isolated environment:
 
 ```bash
-pipx install git+https://github.com/pheinze/ymp.git
+pipx install git+https://github.com/mydcc/ymp.git
 ```
 
 ## Usage

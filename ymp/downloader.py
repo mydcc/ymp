@@ -113,15 +113,26 @@ def download(link, dir_path=None):
     else:
         target_dir = dir_path if dir_path else tempfile.gettempdir()
 
+    # Determine output template based on mode
+    if config.is_permanent_mode():
+        # Artist/Album/Title structure
+        out_tmpl = os.path.join(target_dir, '%(artist)s', '%(album)s', '%(title)s.%(ext)s')
+    else:
+        # Flat structure for cache
+        out_tmpl = os.path.join(target_dir, '%(artist)s - %(title)s.%(ext)s')
+
     options={
         'format': 'bestaudio/best',
-        'outtmpl': os.path.join(target_dir, '%(artist)s - %(title)s.%(ext)s'),
+        'outtmpl': out_tmpl,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '320',
         }, {
             'key': 'EmbedThumbnail',
+        }, {
+            'key': 'FFmpegMetadata',
+            'add_metadata': True,
         }],
         'writethumbnail': True,
         'add_metadata': True,
