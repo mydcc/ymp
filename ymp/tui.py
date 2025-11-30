@@ -117,7 +117,7 @@ class YmpTui(App):
     ]
 
     title = "YMP - Your Music Player"
-    sub_title = "v0.92b1"
+    sub_title = "v0.92b2"
 
     current_song_title = reactive("No song playing")
     is_paused = reactive(False)
