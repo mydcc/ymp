@@ -1,7 +1,8 @@
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Header, Footer, Static, ListView, ListItem, Label, ProgressBar, Log
+from textual.widgets import Header, Footer, Static, ListView, ListItem, Label, ProgressBar, Log, Button
 from textual.binding import Binding
+from textual.message import Message
 from textual import work
 from textual.reactive import reactive
 
@@ -15,6 +16,7 @@ from ymp.playlistmanager import Playlist
 import ymp.downloader as downloader
 import ymp.player as player
 import ymp.config as config
+from ymp.mpris import MprisController
 
 class YmpTui(App):
     """A Textual app for YMP (Your Music Player)."""
@@ -29,6 +31,24 @@ class YmpTui(App):
         height: 100%;
         border: solid green;
         background: $surface;
+    }
+
+    #controls-container {
+        height: 5;
+        dock: bottom;
+        background: $panel;
+        border-top: solid $primary;
+        align: center middle;
+    }
+
+    #controls-container Button {
+        margin: 1 2;
+        min-width: 12;
+    }
+
+    .downloading {
+        color: green;
+        text-style: bold;
     }
 
     #main-container {
@@ -60,6 +80,17 @@ class YmpTui(App):
         height: 1;
     }
 
+    #download-indicator {
+        width: 100%;
+        text-align: right;
+        color: #444444;
+    }
+
+    #download-indicator.active {
+        color: #00ff00;
+        text-style: bold;
+    }
+
     #log-view {
         height: 1fr;
         border: solid gray;
@@ -86,7 +117,7 @@ class YmpTui(App):
     ]
 
     title = "YMP - Your Music Player"
-    sub_title = "v0.92b1"
+    sub_title = "v0.92b2"
 
     current_song_title = reactive("No song playing")
     is_paused = reactive(False)
@@ -121,15 +152,70 @@ class YmpTui(App):
             with Vertical(id="main-container"):
                 yield Static("Now Playing:", classes="label")
                 yield Static(self.current_song_title, id="now-playing")
+                yield Label("Idle", id="download-indicator")
                 yield ProgressBar(total=100, show_eta=False, id="progress-bar")
+
+                # Player Controls (Buttons)
+                with Horizontal(id="controls-container"):
+                     yield Button("Previous", id="btn-prev", variant="primary")
+                     yield Button("Play/Pause", id="btn-play", variant="warning")
+                     yield Button("Next", id="btn-next", variant="primary")
+
                 yield Log(id="log-view")
 
         yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button clicks."""
+        button_id = event.button.id
+        if button_id == "btn-prev":
+            self.action_prev_song()
+        elif button_id == "btn-play":
+            self.action_toggle_pause()
+        elif button_id == "btn-next":
+            self.action_next_song()
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle playlist item selection (click)."""
+        # We want to jump to this song.
+        # This requires finding the song in the queue and skipping to it or moving it up.
+        # Since 'playlist.queuedplaylist' is just a list, playing a specific index is tricky
+        # if the logic relies on popping(0).
+        # A simple hack: Move the selected item to index 0 and call 'next_song'.
+
+        # Determine index from UI
+        # Note: The UI might be truncated (first 100 items), so index maps directly for those.
+        # If user clicks "and more items...", ignore.
+
+        try:
+            # ListView.index gives the selected index
+            index = self.query_one("#playlist-view", ListView).index
+            if index is None: return
+
+            # Check boundaries
+            if index < len(self.playlist.queuedplaylist):
+                song = self.playlist.queuedplaylist[index]
+                self.log_message(f"Jumping to: {song}")
+
+                # Remove from current position and insert at top
+                self.playlist.queuedplaylist.pop(index)
+                self.playlist.queuedplaylist.insert(0, song)
+
+                # Stop current playback and trigger next
+                self.playlist.stop_song() # Stops ffplay
+                # The run_player_loop will see nothing playing and start the next song (which is now our selection)
+
+                self.update_playlist_view()
+        except Exception as e:
+            self.log_message(f"Error selecting song: {e}")
 
     def on_mount(self) -> None:
         """Called when app starts."""
         self.update_playlist_view()
         self.log_message("YMP Started. Ready to play.")
+
+        # Initialize MPRIS
+        self.mpris = MprisController(self)
 
         # Check for unexpanded playlists in the queue
         self.check_for_playlists()
@@ -283,15 +369,31 @@ class YmpTui(App):
             self.app.call_from_thread(self.log_message, f"Error starting song: {e}")
             self.app.call_from_thread(self.set_loading_false)
 
+    def update_download_indicator(self, active: bool):
+        lbl = self.query_one("#download-indicator", Label)
+        if active:
+            lbl.update("Downloading...")
+            lbl.add_class("active")
+        else:
+            lbl.update("Download Complete / Idle")
+            lbl.remove_class("active")
+
     @work(thread=True)
     def background_cache(self, song):
         """Downloads the song to cache in the background while it plays."""
+        self.app.call_from_thread(self.update_download_indicator, True)
         try:
              # We use the standard download function which handles smart cache logic
-             downloader.download(song)
-             # self.app.call_from_thread(self.log_message, "Cached in background.")
-        except Exception:
-             pass
+             self.app.call_from_thread(self.log_message, f"Background downloading: {song}")
+             meta, path = downloader.download(song)
+             if path:
+                 self.app.call_from_thread(self.log_message, f"Saved to: {path}")
+             else:
+                 self.app.call_from_thread(self.log_message, f"Download failed for: {song}")
+        except Exception as e:
+             self.app.call_from_thread(self.log_message, f"Cache Error: {e}")
+        finally:
+             self.app.call_from_thread(self.update_download_indicator, False)
 
     def set_loading_false(self):
         """Helper to reset loading state."""
@@ -300,22 +402,36 @@ class YmpTui(App):
     def play_stream(self, meta, url):
         """Plays a URL stream directly."""
         title = meta.get('title', 'Unknown')
+        artist = meta.get('artist', '')
+        duration = meta.get('duration', 0)
+
         self.current_song_title = title
         self.query_one("#now-playing", Static).update(title)
+
+        # Update MPRIS
+        self.mpris.update_metadata(title, duration, artist)
+        self.mpris.update_playback_status(True)
 
         # Set the filepath to the URL so genmusic plays the stream
         self.playlist.filepath = url
         self.playlist.playsong(meta, None) # dir_path=None implies stream or not needed for URL
 
-        self.progress_total = meta.get('duration', 100)
+        self.progress_total = duration or 100
         self.query_one(ProgressBar).update(total=self.progress_total)
         self.is_loading = False
 
     def play_downloaded(self, meta, dir_path):
         title = meta.get('title', 'Unknown')
+        artist = meta.get('artist', '')
+        duration = meta.get('duration', 0)
+
         self.current_song_title = title
         self.query_one("#now-playing", Static).update(title)
         self.log_message(f"Playing: {title}")
+
+        # Update MPRIS
+        self.mpris.update_metadata(title, duration, artist)
+        self.mpris.update_playback_status(True)
 
         # LRU Optimization: Touch the file to update mtime so it's not deleted by SmartDownload
         if self.playlist.filepath and os.path.exists(self.playlist.filepath):
@@ -325,7 +441,7 @@ class YmpTui(App):
                 pass
 
         self.playlist.playsong(meta, dir_path)
-        self.progress_total = meta.get('duration', 100)
+        self.progress_total = duration or 100
         self.query_one(ProgressBar).update(total=self.progress_total)
         self.is_loading = False
 
@@ -349,10 +465,12 @@ class YmpTui(App):
              self.playlist.resumesong(None)
              self.log_message("Resumed.")
              self.is_paused = False
+             self.mpris.update_playback_status(True)
         else:
              self.playlist.pausesong()
              self.log_message("Paused.")
              self.is_paused = True
+             self.mpris.update_playback_status(False)
 
     def action_next_song(self):
         self.log_message("Skipping to next...")

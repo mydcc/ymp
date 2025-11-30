@@ -5,13 +5,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="ymp",
-    version="0.92b1",
+    version="0.92b2",
     author="pheinze",
     author_email="pheinze82@gmail.com",
     description="A command-line music player for YouTube.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/pheinze/ymp",
+    url="https://github.com/mydcc/ymp",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
