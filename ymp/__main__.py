@@ -169,6 +169,7 @@ def main():
     parser.add_argument("-y", action='store', metavar='link', help="Play a Youtube Playlist")
     parser.add_argument("-p", action='store', nargs='+', metavar='song', help="Play multiple youtube links or a songs")
     parser.add_argument("-l", action='store', metavar='playlistname', help="Play a ymp generated playlist")
+    parser.add_argument("-d", "--download", action='store_true', help="Keep downloaded songs permanently (disable Smart Download cleanup)")
     parser.add_argument('-u', '--update', action='store_true', help="Check for updates")
     parser.add_argument('--donate', action='store_true', help="Show donation information")
     parser.add_argument('--config', action='store_true', help="Configure YMP settings interactively")
@@ -210,6 +211,10 @@ You can play internet radio playlists (.pls) by passing the URL or file path.
         """
         console.print(Markdown(manual_text))
         sys.exit()
+
+    if args.download:
+        config.set_runtime_permanent_storage(True)
+        print(colored("Permanent Download Mode Enabled.", "blue"))
 
     if args.config:
         print(colored("--- YMP Configuration Wizard ---", "cyan"))

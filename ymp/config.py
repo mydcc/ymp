@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     },
     'SmartDownload': {
         'enabled': 'True',
+        'permanent_mode': 'False', # If True, disables auto-deletion (runtime override)
         'max_songs': '10',  # Number of songs to keep
         'max_storage_mb': '0', # 0 = unlimited/disabled
         'preload_enabled': 'True',
@@ -57,8 +58,20 @@ def get_playlist_dir():
     os.makedirs(path, exist_ok=True)
     return path
 
+# Runtime flag to override configuration
+_runtime_permanent = False
+
+def set_runtime_permanent_storage(enabled):
+    global _runtime_permanent
+    _runtime_permanent = enabled
+
 def is_smart_download_enabled():
+    if _runtime_permanent:
+        return True # It is enabled in the sense that we download, but deletion is handled separately
     return get_config().getboolean('SmartDownload', 'enabled')
+
+def is_permanent_mode():
+    return _runtime_permanent or get_config().getboolean('SmartDownload', 'permanent_mode', fallback=False)
 
 def get_max_songs():
     return get_config().getint('SmartDownload', 'max_songs')
@@ -85,6 +98,9 @@ def check_disk_usage(path):
 
 def manage_storage():
     """Enforces Smart Download limits (max songs / max storage)."""
+    if is_permanent_mode():
+        return # Skip cleanup in permanent mode
+
     music_dir = get_music_dir()
     if not os.path.exists(music_dir):
         return
@@ -93,7 +109,12 @@ def manage_storage():
     max_songs = config.getint('SmartDownload', 'max_songs')
     max_mb = config.getint('SmartDownload', 'max_storage_mb')
 
-    files = [os.path.join(music_dir, f) for f in os.listdir(music_dir) if f.endswith('.mp3')]
+    # Recursively find mp3 files to handle nested directories
+    files = []
+    for dirpath, _, filenames in os.walk(music_dir):
+        for f in filenames:
+            if f.endswith('.mp3'):
+                files.append(os.path.join(dirpath, f))
     # Sort by creation time (oldest first) - though access time might be better for cache?
     # Using modification time as proxy for "downloaded time"
     files.sort(key=os.path.getmtime)
