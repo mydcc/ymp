@@ -3,9 +3,7 @@ try:
     from mpris_server.events import EventAdapter
     from mpris_server.server import Server
     MPRIS_AVAILABLE = True
-except (ImportError, SyntaxError):
-    # SyntaxError catches cases where mpris_server uses newer Python syntax (e.g. 3.12 type aliases)
-    # but we are running on an older Python version (e.g. 3.11).
+except ImportError:
     MPRIS_AVAILABLE = False
     # Mock classes for Type Hinting / Safe Import
     class MprisAdapter: pass
