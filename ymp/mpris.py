@@ -1,36 +1,20 @@
+try:
+    from mpris_server.adapters import MprisAdapter
+    from mpris_server.events import EventAdapter
+    from mpris_server.server import Server
+    MPRIS_AVAILABLE = True
+except ImportError:
+    MPRIS_AVAILABLE = False
+    # Mock classes for Type Hinting / Safe Import
+    class MprisAdapter: pass
+    class EventAdapter: pass
+    class Server: pass
+
 import threading
-import importlib
 
-# Placeholder classes
-class MprisAdapter: pass
-
-MPRIS_AVAILABLE = False
-_MprisAdapter = object
-_Server = object
-
-def _try_import_mpris():
-    global MPRIS_AVAILABLE, _MprisAdapter, _Server
-    try:
-        # Dynamic import to catch SyntaxError during module loading
-        # This is necessary because mpris_server uses Python 3.12 syntax
-        # which crashes the app on Python 3.11 even if inside a try/except block
-        # at top level if bytecode compilation fails.
-        mpris_adapters = importlib.import_module("mpris_server.adapters")
-        mpris_server = importlib.import_module("mpris_server.server")
-
-        _MprisAdapter = mpris_adapters.MprisAdapter
-        _Server = mpris_server.Server
-        MPRIS_AVAILABLE = True
-    except (ImportError, SyntaxError, Exception):
-        MPRIS_AVAILABLE = False
-
-
-# We define the adapter dynamically or as a mixin to avoid
-# inheriting from a class that might not exist or be broken.
-class YmpMprisAdapterBase:
+class YmpMprisAdapter(MprisAdapter):
     """
     Adapter linking the YMP TUI/PlaylistManager to the DBus MPRIS interface.
-    Implements the methods required by MprisAdapter.
     """
     def __init__(self, tui_app):
         self.app = tui_app
@@ -46,7 +30,7 @@ class YmpMprisAdapterBase:
         return False
 
     def HasTrackList(self):
-        return False
+        return False # Keeping it simple for now
 
     def Identify(self):
         return "ymp"
@@ -95,9 +79,11 @@ class YmpMprisAdapterBase:
         self.app.call_from_thread(self.app.action_prev_song)
 
     def Stop(self):
-        self.app.call_from_thread(self.app.action_toggle_pause)
+        self.app.call_from_thread(self.app.action_toggle_pause) # Just pause for now
 
     def Seek(self, offset_microseconds):
+         # Offset is relative to current position
+         # offset is in microseconds (1e-6 s)
          seconds = offset_microseconds / 1000000
          self.playlist.seeksong(seconds, None)
 
@@ -109,21 +95,15 @@ class MprisController:
     def __init__(self, tui_app):
         self.app = tui_app
         self.server = None
-
-        # Try importing now
-        _try_import_mpris()
+        self.adapter = None
 
         if not MPRIS_AVAILABLE:
-            tui_app.log_message("MPRIS not available (optional dependency missing or incompatible). Media keys disabled.")
+            tui_app.log_message("MPRIS not available (install mpris_server). Media keys disabled.")
             return
 
         try:
-            # Create the adapter class dynamically to inherit from the real MprisAdapter
-            class RealYmpMprisAdapter(YmpMprisAdapterBase, _MprisAdapter):
-                pass
-
-            self.adapter = RealYmpMprisAdapter(tui_app)
-            self.server = _Server("ymp", adapter=self.adapter)
+            self.adapter = YmpMprisAdapter(tui_app)
+            self.server = Server("ymp", adapter=self.adapter)
 
             # Start loop in background
             self.thread = threading.Thread(target=self.server.loop, daemon=True)
@@ -136,25 +116,20 @@ class MprisController:
     def update_metadata(self, title, duration=0, artist=""):
         if not self.server: return
 
+        # Duration in microseconds
         duration_us = int(duration * 1000000) if duration else 0
 
         metadata = {
             'mpris:trackid': '/ymp/current',
             'mpris:length': duration_us,
-            'mpris:artUrl': '',
+            'mpris:artUrl': '', # Could add thumb path
             'xesam:title': title,
             'xesam:artist': [artist] if artist else [],
             'xesam:album': '',
         }
-        try:
-            self.server.update_metadata(metadata)
-        except:
-            pass
+        self.server.update_metadata(metadata)
 
     def update_playback_status(self, is_playing):
         if not self.server: return
         status = "Playing" if is_playing else "Paused"
-        try:
-            self.server.update_playback_status(status)
-        except:
-            pass
+        self.server.update_playback_status(status)
