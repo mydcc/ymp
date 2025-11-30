@@ -96,7 +96,7 @@ def check_for_updates():
     print("Checking for updates...")
     try:
         # Get the latest commit hash from the master branch on GitHub
-        url = "https://api.github.com/repos/pheinze/ymp/commits/master"
+        url = "https://api.github.com/repos/mydcc/ymp/commits/master"
         with request.urlopen(url, timeout=5) as response:
             data = json.load(response)
             latest_commit = data['sha']
@@ -120,7 +120,7 @@ def check_for_updates():
                 print("Upgrading from GitHub with pipx...")
                 try:
                     subprocess.run(
-                        ["pipx", "install", "--force", "git+https://github.com/pheinze/ymp.git"],
+                        ["pipx", "install", "--force", "git+https://github.com/mydcc/ymp.git"],
                         check=True
                     )
                     # After a successful upgrade, save the new commit hash
